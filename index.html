@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#06121d" />
+  <meta name="description" content="Interactive offshore oil platform 3D hologram viewer" />
+  <title>OFFSHORE // 3D Hologram Viewer</title>
+  <style>
+    :root { color-scheme: dark; --bg: #06121d; --panel: rgba(11, 29, 43, .82); --hair: rgba(95, 235, 230, .17); --ink: #e8fbfb; --muted: #88abb3; --cyan:#47f5e7; --cyan2:#a1fffa; }
+    * { box-sizing: border-box; }
+    html,body { width:100%; height:100%; margin:0; overflow:hidden; background:var(--bg); color:var(--ink); font-family:Inter, 'Segoe UI', 'Microsoft YaHei',system-ui,sans-serif; }
+    body::after { content:''; position:fixed; z-index:3; pointer-events:none; inset:0; background:repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(112,232,234,.015) 4px); }
+    #stage { position:fixed; inset:0; touch-action:none; background:radial-gradient(circle at 52% 47%,#143247 0%,#071c2b 37%,#06111d 73%,#030b12 100%); }
+    #stage canvas { display:block; width:100%; height:100%; outline:0; }
+    .grid { position:fixed; pointer-events:none; inset:0; z-index:1; opacity:.15; background-image:linear-gradient(to right, rgba(89,228,233,.1) 1px, transparent 1px),linear-gradient(to bottom,rgba(89,228,233,.1) 1px,transparent 1px); background-size:54px 54px; mask-image:linear-gradient(90deg,transparent,black 22%,black 78%,transparent); }
+    header { position:fixed; z-index:4; left:clamp(18px,4vw,64px); top:clamp(18px,3.2vw,48px); display:flex; align-items:center; gap:15px; pointer-events:none; }
+    .logo { width:42px;height:42px;display:grid;place-items:center; color:var(--cyan); border:1px solid var(--cyan); border-radius:11px;background:rgba(41,255,235,.06); box-shadow:0 0 36px rgba(0,245,228,.08); font-size:22px; }
+    .overline {font-size:10px;font-weight:800;letter-spacing:.29em;color:var(--cyan);}
+    h1{font-size:clamp(19px,2.5vw,28px); margin:3px 0 0; font-weight:650;letter-spacing:.015em; line-height:1.1;}
+    .subtitle {font-size:12px;margin-top:7px;color:var(--muted);}
+    .badge {position:fixed; top:clamp(25px,3.4vw,50px); right:clamp(18px,4vw,64px);z-index:4;padding:9px 13px;border:1px solid var(--hair);background:rgba(5,26,35,.68);border-radius:8px; font:700 11px ui-monospace,monospace;letter-spacing:.09em;color:#a4d7d7; pointer-events:none;}
+    .dot {display:inline-block;height:7px;width:7px;border-radius:50%;background:var(--cyan);margin-right:7px;box-shadow:0 0 12px var(--cyan);}
+    .left-rail {position:fixed;z-index:4;left:clamp(18px,4vw,64px);bottom:clamp(23px,4vw,59px);pointer-events:none;max-width:300px;}
+    .small {color:var(--cyan);font:700 10px ui-monospace,monospace;letter-spacing:.21em;margin-bottom:10px;}
+    .description {font-size:12px;line-height:1.85;color:#89a9b5;}
+    .stats {display:flex;gap:16px;margin-top:17px;}
+    .stat {border-top:1px solid var(--hair);padding-top:10px;min-width:91px;}
+    .stat b {display:block;font-size:16px;font-weight:600;color:#dafefd;}
+    .stat span {font-size:10px;letter-spacing:.04em;color:var(--muted);}
+    .controls {position:fixed;z-index:5;right:clamp(18px,4vw,64px);bottom:clamp(23px,4vw,59px);width:min(304px,calc(100vw - 36px));padding:18px;background:var(--panel);border:1px solid rgba(100,242,225,.20);border-radius:16px;box-shadow:0 13px 40px rgba(0,0,0,.18);backdrop-filter:blur(14px);}
+    .control-h {font:800 11px ui-monospace,monospace;letter-spacing:.19em;color:#b8e6e6;margin-bottom:15px;}
+    .mode-grid {display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+    button {font-family:inherit;cursor:pointer;transition:background .18s,transform .18s,border-color .18s;}
+    button:active{transform:scale(.97)}
+    button:focus-visible{outline:2px solid #b7fcf6;outline-offset:2px;}
+    .mode {border-radius:9px;padding:12px 3px;background:rgba(0,0,0,.17);color:#a3c5cb;border:1px solid rgba(133,198,201,.14);font-size:11px;font-weight:700;}
+    .mode.active {background:rgba(34,226,212,.14);border-color:rgba(79,255,234,.58);color:#bbfffa;box-shadow:inset 0 0 15px rgba(43,253,222,.05);}
+    .rowbtn{display:flex;gap:8px;margin-top:11px;}
+    .secondary {flex:1;border:1px solid rgba(133,198,201,.22);border-radius:9px;background:rgba(6,24,37,.72);padding:11px 9px;font-size:11px;font-weight:700;color:#d1e9e9;}
+    .secondary:hover{background:rgba(23,80,92,.7);}
+    .help {margin-top:13px;border-top:1px solid var(--hair);padding-top:13px;font-size:11px;line-height:1.75;color:#80a4ad;}
+    .help b {font-weight:650;color:#d3ebeb;}
+    .loading {position:fixed;z-index:10;inset:0;display:flex;justify-content:center;align-items:center;pointer-events:none;transition:opacity .4s;}
+    .loading.hidden {opacity:0;visibility:hidden;}
+    .load-card{padding:25px 32px;background:rgba(4,21,32,.91);min-width:min(360px,calc(100vw - 48px));border-radius:15px;border:1px solid rgba(47,236,216,.36);box-shadow:0 25px 100px #0008;pointer-events:auto;}
+    .load-title{font-weight:700;font-size:14px;}
+    .load-caption{font-size:11px;color:#8dabb5;margin-top:8px;line-height:1.65;}
+    .bar{height:3px;width:100%;border-radius:5px;background:#263947;margin-top:20px;overflow:hidden;}
+    .bar > div{height:100%;width:0%;background:linear-gradient(90deg,#26cbd1,#6bfce6);transition:width .25s;box-shadow:0 0 9px #56f5e7;}
+    .percent {font-size:10px;color:var(--cyan);font-family:ui-monospace,monospace;margin-top:7px;}
+    .file-btn {display:none;margin-top:15px;border:1px solid var(--cyan);border-radius:8px;color:#b6fff8;padding:10px;background:#103b44;font-weight:700;}
+    .error .file-btn {display:block;}
+    #pick {display:none;}
+    .corner{position:fixed;z-index:2;pointer-events:none;width:27px;height:27px;border-color:rgba(73,255,225,.42);}
+    .tl{left:16px;top:16px;border-top:1px solid;border-left:1px solid}.tr{right:16px;top:16px;border-top:1px solid;border-right:1px solid}.bl{left:16px;bottom:16px;border-bottom:1px solid;border-left:1px solid}.br{right:16px;bottom:16px;border-bottom:1px solid;border-right:1px solid}
+    @media (max-width:750px){
+      header {top:20px;left:19px;gap:10px}.logo{width:36px;height:36px;font-size:18px}h1{font-size:17px}.subtitle{font-size:10px}.badge{top:89px;right:19px;padding:7px 9px;font-size:9px}
+      .left-rail{left:18px;bottom:220px;max-width:210px}.description{display:none}.stats{gap:10px;margin-top:4px}.stat{min-width:72px}.stat b{font-size:12px}.stat span{font-size:9px}.small{font-size:9px;margin-bottom:6px}
+      .controls{left:14px;right:14px;bottom:13px;width:auto;padding:13px}.control-h{margin-bottom:10px;font-size:10px}.mode{padding:10px 3px}.secondary{padding:10px 8px}.help{margin-top:8px;padding-top:8px;font-size:10px;line-height:1.5}
+    }
+    @media (max-height:560px) and (orientation:landscape){.left-rail{display:none}.controls{bottom:12px;padding:10px;width:275px}.help{display:none}header{top:12px}.badge{top:12px}}
+    @media (prefers-reduced-motion: reduce){button,.loading,.bar>div{transition:none}}
+  </style>
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}
+  </script>
+</head>
+<body>
+  <div id="stage" aria-label="3D model interactive scene"></div><div class="grid"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <header><div class="logo" aria-hidden="true">◈</div><div><div class="overline">INTERACTIVE 3D / 001</div><h1>OFFSHORE <span style="color:var(--cyan)">HOLOGRAM</span></h1><div class="subtitle">海上石油钻井平台 · Tripo GLB 模型展示</div></div></header>
+  <div class="badge"><span class="dot"></span>3D VIEWER <span id="indicator">· STANDBY</span></div>
+  <aside class="left-rail"><div class="small">PROJECT // OFFSHORE PLATFORM</div><div class="description">原始 Tripo 3D 模型 + 网站重新绘制的全息视觉效果。可在原始材质、全息与线框模式之间切换。</div><div class="stats"><div class="stat"><b>1.87M</b><span>TRIANGLES</span></div><div class="stat"><b>72 MB</b><span>MODEL FILE</span></div></div></aside>
+  <section class="controls" aria-label="3D viewer controls"><div class="control-h">DISPLAY / 显示模式</div>
+    <div class="mode-grid" role="group" aria-label="显示模式"><button class="mode active" data-mode="holo" aria-pressed="true">✧ 全息</button><button class="mode" data-mode="original" aria-pressed="false">◉ 原始</button><button class="mode" data-mode="wire" aria-pressed="false">◇ 线框</button></div>
+    <div class="rowbtn"><button class="secondary" id="rotate">⟳ 自动旋转：关</button><button class="secondary" id="reset">⌖ 重置视角</button></div>
+    <div class="help"><b>电脑：</b>左键拖动旋转 · 滚轮缩放<br /><b>手机：</b>单指旋转 · 双指缩放</div>
+  </section>
+  <div class="loading" id="loading"><div class="load-card" id="loadCard" role="status"><div class="load-title" id="loadTitle">正在载入 3D 模型…</div><div class="load-caption" id="loadCaption">模型约 72 MB，首次下载可能较慢。<br>请保持网页开启。</div><div class="bar"><div id="progress"></div></div><div class="percent" id="percent">CONNECTING...</div><button class="file-btn" id="choose">从电脑选择 GLB 文件</button><input id="pick" type="file" accept=".glb,model/gltf-binary" /></div></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const $ = id => document.getElementById(id);
+    const stage = $('stage');
+    let viewerReady = false, model = null, mainMesh = null, originalMaterial = null, wireLines = null, currentMode = 'holo';
+    let autoSpin = false;
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x06121d, 0.012);
+    const camera = new THREE.PerspectiveCamera(42, 1, .01, 120);
+    camera.position.set(5.7, 3.8, 7.5);
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+    renderer.setClearColor(0x06121d, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    stage.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = .065;
+    controls.minDistance = 3; controls.maxDistance = 24; controls.enablePan = false;
+    controls.target.set(0,0,0);
+    const ambient = new THREE.AmbientLight(0xd6f9ff, 1.8);scene.add(ambient);
+    const light = new THREE.DirectionalLight(0xffffff, 2.8);light.position.set(6,8,7);scene.add(light);
+    const teal = new THREE.PointLight(0x25e4e9,45,30);teal.position.set(-3,3,-3);scene.add(teal);
+    const platform = new THREE.Group();scene.add(platform);
+    const grid = new THREE.GridHelper(25, 32, 0x16666c, 0x12394a);
+    grid.material.transparent = true;grid.material.opacity = .24;grid.position.y = -2.5;scene.add(grid);
+    const rings = new THREE.Group(); scene.add(rings);
+    for(const radius of [3.0,4.0]){
+      const pts=[]; for(let i=0;i<=160;i++){const a=i/160*Math.PI*2;pts.push(new THREE.Vector3(radius*Math.cos(a),-2.47,radius*Math.sin(a)));}
+      const geo=new THREE.BufferGeometry().setFromPoints(pts), mat=new THREE.LineBasicMaterial({color:0x27c7cc,transparent:true,opacity: radius===3 ? .39 : .17});
+      rings.add(new THREE.Line(geo,mat));
+    }
+    function resize(){const w=stage.clientWidth,h=stage.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}window.addEventListener('resize',resize);resize();
+    const clock=new THREE.Clock();
+    function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05);if(autoSpin&&model)platform.rotation.y+=dt*.13;controls.update();renderer.render(scene,camera);}animate();
+    function status(message, error=false){$('indicator').textContent='· '+message;$('indicator').style.color=error?'#ffa7a7':'';}
+    function showError(message){$('loadCard').classList.add('error');$('loadTitle').textContent='加载模型时遇到问题';$('loadCaption').textContent=message+'。可以手动选择 GLB 文件尝试加载。';$('percent').textContent='FILE SELECT AVAILABLE';status('LOAD ERROR',true);}
+    function sampledWireGeometry(geometry, targetTriangles=37000){
+      const pos=geometry.getAttribute('position'); if(!pos) return null;
+      const idx=geometry.getIndex(), total=Math.floor((idx?idx.count:pos.count)/3);
+      const step=Math.max(1,Math.ceil(total/targetTriangles));
+      const verts=[];
+      const p = new THREE.Vector3();
+      function addPoint(index){p.fromBufferAttribute(pos,index);verts.push(p.x,p.y,p.z);}
+      for(let t=0;t<total;t+=step){
+        const base=t*3;let a,b,c;
+        if(idx){a=idx.getX(base);b=idx.getX(base+1);c=idx.getX(base+2);}else{a=base;b=base+1;c=base+2;}
+        addPoint(a);addPoint(b);addPoint(b);addPoint(c);addPoint(c);addPoint(a);
+      }
+      const lineGeo=new THREE.BufferGeometry();lineGeo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));return lineGeo;
+    }
+    const holoMaterial = new THREE.MeshBasicMaterial({color:0x2affed,transparent:true,opacity:.16,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+    const wireMaterial = new THREE.LineBasicMaterial({color:0x53fff0,transparent:true,opacity:.67,depthWrite:false,blending:THREE.AdditiveBlending});
+    function setMode(mode){
+      currentMode=mode;
+      document.querySelectorAll('[data-mode]').forEach(b=>{const on=b.dataset.mode===mode;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
+      if(!mainMesh) return;
+      mainMesh.visible=true;
+      mainMesh.material=mode==='original'?originalMaterial:holoMaterial;
+      holoMaterial.opacity=mode==='holo'?.16:.055;
+      if(wireLines){wireLines.visible=mode!=='original';wireLines.material.opacity=mode==='holo'?.67:.92;}
+      grid.visible=rings.visible=mode!=='original';
+    }
+    document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
+    $('rotate').addEventListener('click',()=>{autoSpin=!autoSpin;$('rotate').textContent='⟳ 自动旋转：'+(autoSpin?'开':'关');});
+    function resetCamera(){platform.rotation.set(0,0,0);camera.position.set(5.7,3.8,7.5);controls.target.set(0,0,0);controls.update();}
+    $('reset').addEventListener('click',resetCamera);
+    function processModel(gltf){
+      if(model){platform.remove(model);model.traverse(obj=>{if(obj.isMesh){obj.geometry?.dispose();}});} // user may reload
+      model=gltf.scene;platform.add(model);const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      const scale=5.2/Math.max(size.x,size.y,size.z,.001);model.scale.setScalar(scale);
+      model.updateMatrixWorld(true);
+      let firstMesh=null;model.traverse(child=>{if(child.isMesh && !firstMesh)firstMesh=child;});
+      if(!firstMesh) throw Error('GLB 内没有可展示的 Mesh');
+      mainMesh=firstMesh; originalMaterial=mainMesh.material;
+      // Wire is a light-weight sampled visualization to avoid duplicating 1.87M triangles as line geometry.
+      if(wireLines){model.remove(wireLines);wireLines.geometry.dispose();wireLines=null;}
+      const wireGeo=sampledWireGeometry(mainMesh.geometry);
+      if(wireGeo){
+        wireLines=new THREE.LineSegments(wireGeo,wireMaterial);wireLines.name='HologramWire';wireLines.frustumCulled=false;
+        // Keep the lines under the same mesh transform, but only replace its material.
+        mainMesh.add(wireLines);
+      }
+      setMode(currentMode);
+      viewerReady=true;
+      $('loading').classList.add('hidden');$('progress').style.width='100%';
+      status('MODEL READY');
+    }
+    const loader=new GLTFLoader();
+    function loadFromUrl(url){
+      $('loadCard').classList.remove('error');
+      loader.load(url,gltf=>{try{processModel(gltf);}catch(err){console.error(err);showError(err.message||'模型处理失败');}},xhr=>{
+        if(xhr.total){const p=Math.min(99,Math.round(xhr.loaded/xhr.total*100));$('progress').style.width=p+'%';$('percent').textContent=p+'% · '+(xhr.loaded/1048576).toFixed(1)+' MB / '+(xhr.total/1048576).toFixed(1)+' MB';}
+        else {$('percent').textContent=(xhr.loaded/1048576).toFixed(1)+' MB received';}
+      },err=>{console.error(err);showError(location.protocol==='file:'?'浏览器通常不允许直接通过 file:// 读取 GLB，请用 start_website.bat 启动本地网站':'请检查 GLB 路径、浏览器网络或网站服务设置');});
+    }
+    $('choose').addEventListener('click',()=>$('pick').click());
+    $('pick').addEventListener('change',()=>{const file=$('pick').files[0];if(!file)return;const url=URL.createObjectURL(file);$('loadTitle').textContent='正在载入本地 GLB…';loadFromUrl(url);});
+    loadFromUrl('./offshore-platform.glb');
+  </script>
+</body>
+</html>
